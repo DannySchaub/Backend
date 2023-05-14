@@ -1,0 +1,37 @@
+GET http://localhost:3000/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6IkRhbm55IiwicGFzc3dvcmQiOiIkMmIkMTAkcWdidjhCbkV1Wk5zSWR0L2RhNXd2T0RaaU9CM1drLnVRYWMva1lFdEVkWks5WEIvam83ankiLCJpYXQiOjE2ODM5MzU2MzQsImV4cCI6MTY4MzkzNTkzNH0.ymWQpekdjJ1wyUTMSfzyDbS5iWhy95nOcqpnKPpVpls
+
+###
+
+POST http://localhost:3000/create-user
+Content-Type: application/json
+
+{
+    "username": "Danny",
+    "password": "secret"
+}
+
+###
+
+POST http://localhost:3000/login
+Content-Type: application/json
+
+{
+    "username": "Danny",
+    "password": "secret"
+}
+
+###
+
+POST http://localhost:3000/token 
+Content-Type: application/json
+
+{
+    "token": ""
+}
+
+###
+
+GET http://localhost:3000/logout
+
+###
