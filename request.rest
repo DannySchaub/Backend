@@ -23,7 +23,7 @@ Content-Type: application/json
 
 ###
 
-POST http://localhost:3000/token 
+POST http://localhost:3000/refreshToken 
 Content-Type: application/json
 
 {
@@ -33,5 +33,9 @@ Content-Type: application/json
 ###
 
 GET http://localhost:3000/logout
+
+###
+
+GET http://localhost:3000/cookies
 
 ###
