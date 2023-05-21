@@ -1,10 +1,9 @@
 require('dotenv').config()
 const express = require("express")
 const app = express()
-app.use(express.json())
 
-const {initCookie, getCookieInfo, setCookie} = require("./cookies.js")
-const cookieParser = require('cookie-parser')
+const { authenticateToken } = require("./auth")
+const configureApp = require('./expressBus')
 const jwt = require('jsonwebtoken')
 const bcrypt = require("bcrypt")
 const PORT = 3000
@@ -12,14 +11,14 @@ const PORT = 3000
 const baseURL = 'http://localhost:3000'
 
 var tempUsers = []  //store in a database to keep away from attackers
-var refreshTokens = []  //Implement cookies to keep away from attackers
+var refreshTokens = []  //Implement cookies to keep away from attackers/ + Database to store them?
 
-app.use(cookieParser())
+configureApp(app)
 
 app.post('/create-user', async (req, res) => {
     try{
         const salt = await bcrypt.genSalt()
-        const hashedPass = await bcrypt.hashSync(req.body.password, salt)
+        const hashedPass = bcrypt.hashSync(req.body.password, salt)
 
         const user = {username: req.body.username, password: hashedPass}
         tempUsers.push(user)
@@ -31,24 +30,11 @@ app.post('/create-user', async (req, res) => {
 })
 
 app.get('/users', authenticateToken, (req, res) => {
-    res.json(tempUsers.filter(user => user.username === req.user.username))
+    const user = tempUsers.find(user => user['username'] === req.body.username)
+    res.send('Authorized access token ' + 
+    "message:" + res.message
+    )
 })
-
-function authenticateToken(req, res, next){
-    console.log(req.headers)
-    const authHeader = req.headers.authorization
-    const token = authHeader && authHeader.split(' ')[1]
-
-    if(token == null) 
-        return res.status(401).send("Error getting token")
-
-    jwt.verify(token, process.env.ACCESS_TOKEN, (err, user) => {
-        if(err) 
-            return res.status(403).send("Invalid Token")
-        req.user = user
-        next()
-    })
-}
 
 app.post('/login', async (req, res) => {
     try{
@@ -71,29 +57,12 @@ app.post('/login', async (req, res) => {
             return res.status(400).send("Unable to find Username.")
         }
         
-        const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: '300s' })
+        const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: '600s' })
         const refreshToken = jwt.sign(user, process.env.REFRESH_TOKEN)
         
         refreshTokens.push(refreshToken) //replace with cookies/database
 
-        
-        const today = new Date()
-        res.cookie("RefreshToken", refreshToken, {
-            expires: today.setFullYear(today.getFullYear + 3),
-            httpOnly: true,
-            sameSite: 'lax',
-            secure: true
-        })
-        
-        const tenMinutes = new Date(Date.now() + 600*1000)
-        res.cookie("AccessToken", accessToken, {
-            expires: tenMinutes,
-            httpOnly: true,
-            sameSite: 'lax',
-            secure: true
-        })
-        
-        res.json({message: "Successfully logged in.", accessToken: accessToken, refreshToken: refreshToken})
+        res.status(200).send({message: "Successfully logged in.", accessToken: accessToken, refreshToken: refreshToken})
     } catch{
         res.status(401).send("Error occured while logging in.")
     }
@@ -105,10 +74,11 @@ app.get("/login", (req, res) => {
 
 //http://localhost:3000/readCookies
 app.get("/readCookies", (req, res) => {
-    const accessToken = req.cookies['AccessToken']
-    const refreshToken = req.cookies['RefreshToken']
+    const obj = req.cookies
+    const accessToken = obj["AccessToken"]
+    const refreshToken = obj["RefreshToken"]
 
-    res.send(`Value of 'my-cookie' cookie: ${accessToken}\n${refreshToken}`)
+    res.send(`Value of 'AccessToken' cookie: ${accessToken}\nValue of 'RefreshToken': ${refreshToken}`)
 })
 
 //http://localhost:3000/loginRequest?username=Danny&password=secret
@@ -127,7 +97,23 @@ app.get("/loginRequest", (req, res) => {
         return resp.json()
     }).then(data => {
         console.log('User logged in successfully') 
-        console.log(data.cookie)
+
+        const today = new Date()
+        res.cookie("RefreshToken", data.refreshToken, {
+            expires: today.setFullYear(today.getFullYear + 3), //expires in three years
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: true
+        })
+        
+        const tenMinutes = new Date(Date.now() + 600*1000)
+        res.cookie("AccessToken", data.accessToken, {
+            expires: tenMinutes,
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: true
+        })
+
         res.send(
             "message:" + data.message +
             "\naccessToken:" + data.accessToken +
@@ -162,39 +148,15 @@ app.get('/create-user', (req, res) => {
     })
 })
 
-app.use("/", (req, res) => {
-     res.send("Home Page")
+app.get("/", (req, res) => {
+    res.send("Home Page")
 })
 
-
-
-app.post("/refreshToken", (req, res) => {
-    const arr = document.cookie.split("; ")
-    const refreshToken = arr["RefreshToken"]
-    //const refreshToken = req.body.refreshToken
-
-    if (refreshToken == null) 
-        return res.status(401).send("Missing Refresh Token")
-    if (!refreshTokens.includes(refreshToken)) 
-        return res.status(403).send("Invalid Refresh Token")
-
-    jwt.verify(refreshToken, process.env.REFRESH_TOKEN, (err, user) => {
-        if (err) 
-            return res.status(403).send("Invalid Refresh Token")
-        const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: '300s' })
-        res.json({ message: "Generated new access token.", accessToken: accessToken })
-  })
-})
-
-app.use('/logout', (req, res) => {
-    tempUsers = tempUsers.filter(user => user !== req.body.user)
-    refreshTokens = refreshTokens.filter(token => token !== req.body.token)
-    res.sendStatus(204)
-})
-
-app.get('/cookies', (req, res) => {
-    res.json(getCookieInfo("AccessToken"), getCookieInfo("RefreshToken"), getCookieInfo("notValid"))
-})
+// app.use('/logout', (req, res) => {
+//     tempUsers = tempUsers.filter(user => user !== req.body.user)
+//     refreshTokens = refreshTokens.filter(token => token !== req.body.token)
+//     res.sendStatus(204)
+// })
 
 app.listen(PORT,  () => {
     console.log('> Ready on http://localhost:3000')
